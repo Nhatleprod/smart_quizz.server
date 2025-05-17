@@ -7,6 +7,7 @@ const morgan = require("morgan");
 // Import routes
 const accountsRouter = require("./routes/accounts.router");
 const usersRouter = require("./routes/users.router");
+const adminsRouter = require("./routes/admins.router");
 const testRouter = require("./routes/test.router");
 
 const { sequelize } = require("./config/db.config");
@@ -23,6 +24,7 @@ app.use(morgan("dev"));
 app.use("/api/test", testRouter);
 app.use("/api/accounts", accountsRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/admins", adminsRouter);
 app.get("/", (req, res) => {
   res.send("API đang chạy");
 });
