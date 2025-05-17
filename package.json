@@ -15,7 +15,7 @@
   },
   "name": "smartquiz.server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "devDependencies": {
     "jest": "^29.7.0",
     "supertest": "^7.1.1"
