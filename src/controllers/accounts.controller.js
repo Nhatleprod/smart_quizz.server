@@ -2,6 +2,7 @@
 const { models } = require('../config/db.config');
 const Accounts = models.accounts;
 const { Op } = require('sequelize');
+const bcrypt = require('bcryptjs');
 
 // Tạo một tài khoản mới
 exports.createAccount = async (req, res) => {
@@ -90,28 +91,29 @@ exports.getAccountById = async (req, res) => {
 exports.updateAccount = async (req, res) => {
   try {
     const account = await Accounts.findByPk(req.params.id);
-    
+
     if (!account) {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy tài khoản với ID này'
       });
     }
-    
+
+    // Không cho cập nhật mật khẩu ở route này
+    delete req.body.password;
+
     await account.update(req.body);
-    
-    // Lấy dữ liệu đã cập nhật nhưng loại bỏ passwordHash
+
     const updatedAccount = await Accounts.findByPk(req.params.id, {
       attributes: { exclude: ['passwordHash'] }
     });
-    
+
     res.status(200).json({
       success: true,
       message: 'Cập nhật tài khoản thành công',
       data: updatedAccount
     });
   } catch (error) {
-    // Xử lý lỗi trùng lặp email/username khi cập nhật
     if (error.name === 'SequelizeUniqueConstraintError') {
       const field = error.errors[0].path;
       return res.status(400).json({
@@ -119,7 +121,7 @@ exports.updateAccount = async (req, res) => {
         message: `${field === 'email' ? 'Email' : 'Tên người dùng'} đã tồn tại`
       });
     }
-    
+
     console.error('Lỗi khi cập nhật tài khoản:', error);
     res.status(500).json({
       success: false,
@@ -128,6 +130,47 @@ exports.updateAccount = async (req, res) => {
     });
   }
 };
+
+// Câp nhật mật khẩu tài khoản
+exports.changePassword = async (req, res) => {
+  const { oldPassword, passwordHash } = req.body;
+
+  try {
+    const account = await Accounts.findByPk(req.params.id);
+
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy tài khoản với ID này'
+      });
+    }
+    console.log('pass', account.passwordHash);
+
+    const isMatch = await bcrypt.compare(oldPassword, account.passwordHash);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu cũ không đúng'
+      });
+    }
+
+    // Cập nhật passwordHash mới đã được middleware xử lý sẵn
+    await account.update({ passwordHash });
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật mật khẩu thành công'
+    });
+  } catch (error) {
+    console.error('Lỗi khi cập nhật mật khẩu:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Đã xảy ra lỗi khi cập nhật mật khẩu',
+      error: error.message
+    });
+  }
+};
+
 
 // Xóa tài khoản
 exports.deleteAccount = async (req, res) => {

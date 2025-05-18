@@ -5,7 +5,7 @@ const adminsController = require('../controllers/admins.controller');
 // Tạo admin mới
 router.post('/', adminsController.createAdmin);
 
-// Lấy tất cả admin với khả năng lọc và phân trang
+// Lấy tất cả admin
 router.get('/', adminsController.getAllAdmins);
 
 // Lấy admin theo ID
