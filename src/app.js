@@ -6,6 +6,12 @@ const morgan = require("morgan");
 
 // Import routes
 const accountsRouter = require("./routes/accounts.router");
+const usersRouter = require("./routes/users.router");
+const adminsRouter = require("./routes/admins.router");
+const groupStudyRouter = require("./routes/group_study.router");
+const groupMembersRouter = require("./routes/group_members.router");
+const examsRouter = require("./routes/exams.router");
+const questionsRouter = require("./routes/questions.router");
 const testRouter = require("./routes/test.router");
 
 const { sequelize } = require("./config/db.config");
@@ -21,6 +27,12 @@ app.use(morgan("dev"));
 // Routes
 app.use("/api/test", testRouter);
 app.use("/api/accounts", accountsRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/admins", adminsRouter);
+app.use("/api/group_study", groupStudyRouter);
+app.use("/api/group_members", groupMembersRouter);
+app.use("/api/exams", examsRouter);
+app.use("/api/questions", questionsRouter);
 app.get("/", (req, res) => {
   res.send("API đang chạy");
 });

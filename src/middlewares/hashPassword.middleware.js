@@ -18,6 +18,16 @@ exports.hashPassword = async (req, res, next) => {
       
       // Xóa password khỏi request body vì chúng ta không lưu plain password
       delete req.body.password;
+    }else if (req.body.newPassword) {
+      // Nếu có newPassword trong request body
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
+      
+      // Thay thế newPassword bằng passwordHash
+      req.body.passwordHash = hashedPassword;
+      
+      // Xóa newPassword khỏi request body vì chúng ta không lưu plain password
+      delete req.body.newPassword;
     }
     
     next();

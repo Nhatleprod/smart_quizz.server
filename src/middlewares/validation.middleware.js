@@ -93,3 +93,23 @@ exports.validateAccountId = [
   
   handleValidationErrors
 ];
+
+// Validation cho việc cập nhật mật khẩu
+exports.validateChangePassword = [
+  body('oldPassword').notEmpty().withMessage('Vui lòng nhập mật khẩu cũ'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('Mật khẩu mới phải có ít nhất 6 ký tự')
+    .matches(/\d/)
+    .withMessage('Mật khẩu phải chứa ít nhất 1 số'),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+    next();
+  }
+];

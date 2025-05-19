@@ -6,7 +6,7 @@ const router = express.Router();
 const accountsController = require('../controllers/accounts.controller');
 
 // Middlewares
-const { validateCreateAccount, validateUpdateAccount, validateAccountId } = require('../middlewares/validation.middleware');
+const { validateCreateAccount, validateUpdateAccount, validateAccountId, validateChangePassword } = require('../middlewares/validation.middleware');
 const { hashPassword } = require('../middlewares/hashPassword.middleware');
 
 // Routes
@@ -20,7 +20,11 @@ router.get('/', accountsController.getAllAccounts);
 router.get('/:id', validateAccountId, accountsController.getAccountById);
 
 // Cập nhật tài khoản
-router.put('/:id', validateUpdateAccount, hashPassword, accountsController.updateAccount);
+router.put('/:id', validateUpdateAccount, accountsController.updateAccount);
+
+// Cập nhật mật khẩu tài khoản
+router.put('/:id/password', validateChangePassword, hashPassword, accountsController.changePassword);
+
 
 // Xóa tài khoản
 router.delete('/:id', validateAccountId, accountsController.deleteAccount);
