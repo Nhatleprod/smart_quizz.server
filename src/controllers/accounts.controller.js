@@ -1,202 +1,296 @@
 // src/controllers/accounts.controller.js
-const { models } = require('../config/db.config');
+const { models } = require("../config/db.config");
 const Accounts = models.accounts;
-const { Op } = require('sequelize');
-const bcrypt = require('bcryptjs');
+const { Op } = require("sequelize");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const {
+  successResponse,
+  listResponse,
+  errorResponse,
+} = require("../utils/response.util");
+const { createError } = require("../middlewares/error.middleware");
 
 // Tạo một tài khoản mới
-exports.createAccount = async (req, res) => {
+exports.createAccount = async (req, res, next) => {
   try {
-    // Dữ liệu đã được validate và password đã được hash qua middleware
-    const newAccount = await Accounts.create(req.body);
-    
-    // Không trả về passwordHash trong response
-    const { passwordHash, ...accountData } = newAccount.toJSON();
-    
-    res.status(201).json({
-      success: true,
-      message: 'Tạo tài khoản thành công',
-      data: accountData
-    });
+    const accountData = { ...req.body };
+    delete accountData.confirmPassword;
+
+    const newAccount = await Accounts.create(accountData);
+    const { passwordHash, ...accountResponse } = newAccount.toJSON();
+
+    successResponse(res, accountResponse, "Tạo tài khoản thành công", 201);
   } catch (error) {
-    // Xử lý lỗi trùng lặp email/username
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      const field = error.errors[0].path;
-      return res.status(400).json({
-        success: false,
-        message: `${field === 'email' ? 'Email' : 'Tên người dùng'} đã tồn tại`
-      });
-    }
-    
-    console.error('Lỗi khi tạo tài khoản:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi tạo tài khoản',
-      error: error.message
-    });
+    next(error);
   }
 };
 
 // Lấy tất cả tài khoản
-exports.getAllAccounts = async (req, res) => {
+exports.getAllAccounts = async (req, res, next) => {
   try {
     const accounts = await Accounts.findAll({
-      attributes: { exclude: ['passwordHash'] } // Không bao gồm passwordHash trong kết quả trả về
+      attributes: { exclude: ["passwordHash"] },
     });
-    
-    res.status(200).json({
-      success: true,
-      count: accounts.length,
-      data: accounts
-    });
+
+    listResponse(res, accounts, accounts.length);
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách tài khoản:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi lấy danh sách tài khoản',
-      error: error.message
-    });
+    next(error);
   }
 };
 
 // Lấy tài khoản theo ID
-exports.getAccountById = async (req, res) => {
+exports.getAccountById = async (req, res, next) => {
   try {
     const account = await Accounts.findByPk(req.params.id, {
-      attributes: { exclude: ['passwordHash'] }
+      attributes: { exclude: ["passwordHash"] },
     });
-    
+
     if (!account) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy tài khoản với ID này'
-      });
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản với ID này",
+        404
+      );
     }
-    
-    res.status(200).json({
-      success: true,
-      data: account
-    });
+
+    successResponse(res, account);
   } catch (error) {
-    console.error('Lỗi khi lấy thông tin tài khoản:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi lấy thông tin tài khoản',
-      error: error.message
-    });
+    next(error);
   }
 };
 
 // Cập nhật tài khoản
-exports.updateAccount = async (req, res) => {
+exports.updateAccount = async (req, res, next) => {
   try {
     const account = await Accounts.findByPk(req.params.id);
 
     if (!account) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy tài khoản với ID này'
-      });
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản với ID này",
+        404
+      );
     }
 
-    // Không cho cập nhật mật khẩu ở route này
     delete req.body.password;
-
     await account.update(req.body);
 
     const updatedAccount = await Accounts.findByPk(req.params.id, {
-      attributes: { exclude: ['passwordHash'] }
+      attributes: { exclude: ["passwordHash"] },
     });
 
-    res.status(200).json({
-      success: true,
-      message: 'Cập nhật tài khoản thành công',
-      data: updatedAccount
-    });
+    successResponse(res, updatedAccount, "Cập nhật tài khoản thành công");
   } catch (error) {
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      const field = error.errors[0].path;
-      return res.status(400).json({
-        success: false,
-        message: `${field === 'email' ? 'Email' : 'Tên người dùng'} đã tồn tại`
-      });
-    }
-
-    console.error('Lỗi khi cập nhật tài khoản:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi cập nhật tài khoản',
-      error: error.message
-    });
+    next(error);
   }
 };
 
-// Câp nhật mật khẩu tài khoản
-exports.changePassword = async (req, res) => {
-  const { oldPassword, passwordHash } = req.body;
-
+// Cập nhật mật khẩu tài khoản (dùng cho cả đổi mật khẩu và đặt lại mật khẩu)
+exports.changePassword = async (req, res, next) => {
   try {
-    const account = await Accounts.findByPk(req.params.id);
+    const { newPassword } = req.body;
+    const account = req.account;
 
-    if (!account) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy tài khoản với ID này'
-      });
-    }
-    console.log('pass', account.passwordHash);
+    // Cập nhật mật khẩu mới
+    await account.update({ passwordHash: newPassword });
+    const { passwordHash, ...accountData } = account.toJSON();
 
-    const isMatch = await bcrypt.compare(oldPassword, account.passwordHash);
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Mật khẩu cũ không đúng'
-      });
-    }
-
-    // Cập nhật passwordHash mới đã được middleware xử lý sẵn
-    await account.update({ passwordHash });
-
-    res.status(200).json({
-      success: true,
-      message: 'Cập nhật mật khẩu thành công'
-    });
+    successResponse(res, accountData, "Cập nhật mật khẩu thành công");
   } catch (error) {
-    console.error('Lỗi khi cập nhật mật khẩu:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi cập nhật mật khẩu',
-      error: error.message
-    });
+    next(error);
   }
 };
-
 
 // Xóa tài khoản
-exports.deleteAccount = async (req, res) => {
+exports.deleteAccount = async (req, res, next) => {
   try {
     const account = await Accounts.findByPk(req.params.id);
-    
+
     if (!account) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy tài khoản với ID này'
-      });
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản với ID này",
+        404
+      );
     }
-    
+
     await account.destroy();
-    
-    res.status(200).json({
+    successResponse(res, {}, "Xóa tài khoản thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Tìm kiếm tài khoản theo username hoặc email
+exports.findAccountByUsernameOrEmail = async (req, res, next) => {
+  try {
+    const { username, email } = req.body;
+
+    if (!username && !email) {
+      throw createError(
+        "ValidationError",
+        "Vui lòng cung cấp username hoặc email để tìm kiếm",
+        400
+      );
+    }
+
+    const whereCondition = {};
+    if (username) whereCondition.username = username;
+    if (email) whereCondition.email = email;
+
+    const account = await Accounts.findOne({
+      where: whereCondition,
+      attributes: { exclude: ["passwordHash"] },
+    });
+
+    if (!account) {
+      throw createError("NotFoundError", "Không tìm thấy tài khoản", 404);
+    }
+
+    successResponse(res, account);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Đăng nhập
+exports.login = async (req, res, next) => {
+  try {
+    const { account } = req;
+
+    // Tạo access token
+    const accessToken = jwt.sign(
+      {
+        id: account.id,
+        username: account.username,
+        role: account.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "15m", // Token hết hạn sau 15 phút
+      }
+    );
+
+    res.json({
       success: true,
-      message: 'Xóa tài khoản thành công',
-      data: {}
+      message: "Đăng nhập thành công",
+      data: {
+        account: {
+          id: account.id,
+          username: account.username,
+          email: account.email,
+          role: account.role,
+          createdAt: account.createdAt,
+          updatedAt: account.updatedAt,
+        },
+        accessToken,
+      },
     });
   } catch (error) {
-    console.error('Lỗi khi xóa tài khoản:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi xóa tài khoản',
-      error: error.message
+    next(error);
+  }
+};
+
+// Refresh token
+exports.refreshToken = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      throw createError("ValidationError", "Refresh token là bắt buộc", 400);
+    }
+
+    // Tìm refresh token trong database và lấy thông tin tài khoản
+    const tokenRecord = await models.refresh_tokens.findOne({
+      where: {
+        token: refreshToken,
+        isRevoked: false,
+        expiresAt: {
+          [Op.gt]: new Date(), // expiresAt > current time
+        },
+      },
+      include: [
+        {
+          model: models.accounts,
+          as: "account",
+          attributes: { exclude: ["passwordHash"] },
+        },
+      ],
     });
+
+    if (!tokenRecord || !tokenRecord.account) {
+      throw createError(
+        "AuthenticationError",
+        "Refresh token không hợp lệ hoặc đã hết hạn",
+        401
+      );
+    }
+
+    const account = tokenRecord.account;
+
+    // Tạo access token mới
+    const accessToken = jwt.sign(
+      {
+        id: account.id,
+        username: account.username,
+        email: account.email,
+        role: account.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    // Trả về access token mới
+    successResponse(
+      res,
+      {
+        accessToken,
+        expiresIn: 15 * 60, // 15 phút
+      },
+      "Làm mới token thành công"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Đăng xuất (revoke refresh token)
+exports.logout = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      throw createError("ValidationError", "Refresh token là bắt buộc", 400);
+    }
+
+    // Đánh dấu refresh token đã bị thu hồi
+    const [updated] = await models.refresh_tokens.update(
+      { isRevoked: true },
+      {
+        where: {
+          token: refreshToken,
+          isRevoked: false,
+        },
+      }
+    );
+
+    if (updated === 0) {
+      throw createError("NotFoundError", "Không tìm thấy refresh token", 404);
+    }
+
+    successResponse(res, null, "Đăng xuất thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Kiểm tra tài khoản tồn tại (cho chức năng quên mật khẩu)
+exports.checkAccountExists = async (req, res, next) => {
+  try {
+    const { passwordHash, ...accountData } = req.account.toJSON();
+    successResponse(res, accountData, "Tìm thấy tài khoản");
+  } catch (error) {
+    next(error);
   }
 };

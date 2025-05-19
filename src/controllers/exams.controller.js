@@ -1,36 +1,36 @@
-const { models } = require('../config/db.config');
+const { models } = require("../config/db.config");
 const Exams = models.exams;
-const { Op } = require('sequelize');
+const { Op } = require("sequelize");
 
 // Get all exams with optional filtering
 exports.findAll = async (req, res) => {
   try {
     const { title, category, level, isApproved } = req.query;
-    
+
     const filter = {};
-    
+
     if (title) {
       filter.title = { [Op.like]: `%${title}%` };
     }
-    
+
     if (category) {
       filter.category = category;
     }
-    
+
     if (level) {
       filter.level = level;
     }
-    
+
     if (isApproved !== undefined) {
-      filter.isApproved = isApproved === 'true';
+      filter.isApproved = isApproved === "true";
     }
-    
+
     const exams = await Exams.findAll({ where: filter });
-    
+
     res.status(200).json(exams);
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Some error occurred while retrieving exams."
+      message: error.message || "Some error occurred while retrieving exams.",
     });
   }
 };
@@ -39,19 +39,19 @@ exports.findAll = async (req, res) => {
 exports.findOne = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const exam = await Exams.findByPk(id);
-    
+
     if (!exam) {
       return res.status(404).json({
-        message: `Exam with id ${id} not found.`
+        message: `Exam with id ${id} not found.`,
       });
     }
-    
+
     res.status(200).json(exam);
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Error retrieving exam."
+      message: error.message || "Error retrieving exam.",
     });
   }
 };
@@ -59,21 +59,22 @@ exports.findOne = async (req, res) => {
 // Create a new exam
 exports.create = async (req, res) => {
   try {
-    const { title, category, level, description, isApproved, accountId } = req.body;
-    
+    const { title, category, level, description, isApproved, accountId } =
+      req.body;
+
     // Validate required fields
     if (!title) {
       return res.status(400).json({
-        message: "Title is required!"
+        message: "Title is required!",
       });
     }
-    
+
     if (!accountId) {
       return res.status(400).json({
-        message: "Account ID is required!"
+        message: "Account ID is required!",
       });
     }
-    
+
     // Create exam
     const exam = await Exams.create({
       title,
@@ -81,13 +82,13 @@ exports.create = async (req, res) => {
       level,
       description,
       isApproved,
-      accountId
+      accountId,
     });
-    
+
     res.status(201).json(exam);
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Some error occurred while creating the exam."
+      message: error.message || "Some error occurred while creating the exam.",
     });
   }
 };
@@ -96,23 +97,23 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const [updated] = await Exams.update(req.body, {
-      where: { id: id }
+      where: { id: id },
     });
-    
+
     if (updated === 0) {
       return res.status(404).json({
-        message: `Exam with id ${id} not found.`
+        message: `Exam with id ${id} not found.`,
       });
     }
-    
+
     res.status(200).json({
-      message: "Exam updated successfully."
+      message: "Exam updated successfully.",
     });
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Error updating exam."
+      message: error.message || "Error updating exam.",
     });
   }
 };
@@ -121,23 +122,23 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const deleted = await Exams.destroy({
-      where: { id: id }
+      where: { id: id },
     });
-    
+
     if (deleted === 0) {
       return res.status(404).json({
-        message: `Exam with id ${id} not found.`
+        message: `Exam with id ${id} not found.`,
       });
     }
-    
+
     res.status(200).json({
-      message: "Exam deleted successfully."
+      message: "Exam deleted successfully.",
     });
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Error deleting exam."
+      message: error.message || "Error deleting exam.",
     });
   }
 };
@@ -146,15 +147,15 @@ exports.delete = async (req, res) => {
 exports.findByAccountId = async (req, res) => {
   try {
     const accountId = req.params.accountId;
-    
+
     const exams = await Exams.findAll({
-      where: { accountId: accountId }
+      where: { accountId: accountId },
     });
-    
+
     res.status(200).json(exams);
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Error retrieving exams for account."
+      message: error.message || "Error retrieving exams for account.",
     });
   }
 };
@@ -163,24 +164,24 @@ exports.findByAccountId = async (req, res) => {
 exports.approve = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const [updated] = await Exams.update(
       { isApproved: true },
       { where: { id: id } }
     );
-    
+
     if (updated === 0) {
       return res.status(404).json({
-        message: `Exam with id ${id} not found.`
+        message: `Exam with id ${id} not found.`,
       });
     }
-    
+
     res.status(200).json({
-      message: "Exam approved successfully."
+      message: "Exam approved successfully.",
     });
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Error approving exam."
+      message: error.message || "Error approving exam.",
     });
   }
 };
