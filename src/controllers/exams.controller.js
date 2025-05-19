@@ -2,7 +2,7 @@ const { models } = require("../config/db.config");
 const Exams = models.exams;
 const { Op } = require("sequelize");
 
-// Get all exams with optional filtering
+// Lấy danh sách tất cả các bài thi cùng với số lượng câu hỏi, trung bình ratings và số lượng exam attempts cho mỗi bài thi
 exports.findAll = async (req, res) => {
   try {
     const { title, category, level, isApproved } = req.query;

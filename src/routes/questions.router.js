@@ -20,7 +20,7 @@ router.put('/:id', questionsController.update);
 // Xóa một câu hỏi
 router.delete('/:id', questionsController.delete);
 
-// Lấy câu hỏi theo examId
+// Lấy câu hỏi theo examId kèm danh sách câu trả lời 
 router.get('/exam/:examId', questionsController.findByExamId);
 
 module.exports = router;

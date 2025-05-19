@@ -5,6 +5,17 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+
+// Import routes
+const accountsRouter = require("./routes/accounts.router");
+const usersRouter = require("./routes/users.router");
+const adminsRouter = require("./routes/admins.router");
+const groupStudyRouter = require("./routes/group_study.router");
+const groupMembersRouter = require("./routes/group_members.router");
+const examsRouter = require("./routes/exams.router");
+const questionsRouter = require("./routes/questions.router");
+const testRouter = require("./routes/test.router");
+
 const { sequelize } = require("./config/db.config");
 const { errorHandler } = require("./middlewares");
 
@@ -31,66 +42,17 @@ const setupMiddleware = () => {
 };
 
 // Routes
-const setupRoutes = () => {
-  // Health check endpoint
-  app.get("/health", (req, res) => {
-    res.status(200).json({
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    });
-  });
-
-  // Root endpoint
-  app.get("/", (req, res) => {
-    res.json({
-      message: "SmartQuiz API",
-      version: "1.0.0",
-      documentation: "/api/docs",
-    });
-  });
-
-  // API routes - Đặt sau các routes khác
-  if (typeof apiRouter === "function") {
-    app.use("/api", apiRouter);
-  } else {
-    console.error("apiRouter is not a middleware function:", apiRouter);
-    process.exit(1);
-  }
-
-  // 404 handler - Đặt sau tất cả các routes
-  app.use((req, res) => {
-    res.status(404).json({
-      success: false,
-      message: "Route not found",
-    });
-  });
-
-  // Error handler - Đặt cuối cùng
-  if (typeof errorHandler === "function") {
-    app.use(errorHandler);
-  } else {
-    console.error("errorHandler is not a middleware function:", errorHandler);
-    process.exit(1);
-  }
-};
-
-// Database connection
-const connectDatabase = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log("Database connection established successfully");
-  } catch (error) {
-    console.error("Unable to connect to the database:", error);
-    process.exit(1);
-  }
-};
-
-// Khởi động ứng dụng
-const startApp = async () => {
-  try {
-    // Setup middleware trước
-    setupMiddleware();
+app.use("/api/test", testRouter);
+app.use("/api/accounts", accountsRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/admins", adminsRouter);
+app.use("/api/group_study", groupStudyRouter);
+app.use("/api/group_members", groupMembersRouter);
+app.use("/api/exams", examsRouter);
+app.use("/api/questions", questionsRouter);
+app.get("/", (req, res) => {
+  res.send("API đang chạy");
+});
 
     // Connect to database
     await connectDatabase();
