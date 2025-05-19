@@ -42,8 +42,26 @@ exports.getAllAccounts = async (req, res, next) => {
 // Lấy tài khoản theo ID
 exports.getAccountById = async (req, res, next) => {
   try {
+    // Nếu là admin hoặc là chủ tài khoản, trả về đầy đủ thông tin
+    if (req.account.role === 'admin' || req.account.id === req.params.id) {
+      const account = await Accounts.findByPk(req.params.id, {
+        attributes: { exclude: ["passwordHash"] },
+      });
+
+      if (!account) {
+        throw createError(
+          "NotFoundError",
+          "Không tìm thấy tài khoản với ID này",
+          404
+        );
+      }
+
+      return successResponse(res, account);
+    }
+
+    // Nếu là người dùng khác, chỉ trả về thông tin cơ bản
     const account = await Accounts.findByPk(req.params.id, {
-      attributes: { exclude: ["passwordHash"] },
+      attributes: ['id', 'username', 'fullName', 'avatar', 'createdAt'],
     });
 
     if (!account) {
@@ -73,7 +91,14 @@ exports.updateAccount = async (req, res, next) => {
       );
     }
 
-    delete req.body.password;
+    // Không cho phép cập nhật một số trường nhạy cảm
+    const sensitiveFields = ['role', 'passwordHash', 'email'];
+    sensitiveFields.forEach(field => {
+      if (req.body[field] && req.account.role !== 'admin') {
+        delete req.body[field];
+      }
+    });
+
     await account.update(req.body);
 
     const updatedAccount = await Accounts.findByPk(req.params.id, {
@@ -159,18 +184,37 @@ exports.login = async (req, res, next) => {
   try {
     const { account } = req;
 
-    // Tạo access token
+    // Tạo access token với thêm thông tin người dùng
     const accessToken = jwt.sign(
       {
         id: account.id,
         username: account.username,
+        email: account.email,
         role: account.role,
+        fullName: account.fullName,
+        avatar: account.avatar,
+        createdAt: account.createdAt
       },
       process.env.JWT_SECRET,
       {
         expiresIn: "15m", // Token hết hạn sau 15 phút
       }
     );
+
+    // Tạo refresh token
+    const refreshToken = jwt.sign(
+      { id: account.id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" } // Refresh token hết hạn sau 7 ngày
+    );
+
+    // Lưu refresh token vào database
+    await models.refresh_tokens.create({
+      accountId: account.id,
+      token: refreshToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 ngày
+      isRevoked: false
+    });
 
     res.json({
       success: true,
@@ -181,10 +225,14 @@ exports.login = async (req, res, next) => {
           username: account.username,
           email: account.email,
           role: account.role,
+          fullName: account.fullName,
+          avatar: account.avatar,
           createdAt: account.createdAt,
           updatedAt: account.updatedAt,
         },
         accessToken,
+        refreshToken,
+        expiresIn: 15 * 60 // 15 phút
       },
     });
   } catch (error) {
@@ -199,6 +247,27 @@ exports.refreshToken = async (req, res, next) => {
 
     if (!refreshToken) {
       throw createError("ValidationError", "Refresh token là bắt buộc", 400);
+    }
+
+    // Debug log
+    console.log("Processing refresh token:", refreshToken);
+
+    // Verify refresh token
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch (error) {
+      if (error.name === "JsonWebTokenError") {
+        throw createError("AuthenticationError", "Refresh token không hợp lệ", 401);
+      }
+      if (error.name === "TokenExpiredError") {
+        throw createError("AuthenticationError", "Refresh token đã hết hạn", 401);
+      }
+      throw error;
+    }
+
+    if (!decoded || !decoded.id) {
+      throw createError("AuthenticationError", "Refresh token không hợp lệ", 401);
     }
 
     // Tìm refresh token trong database và lấy thông tin tài khoản
@@ -229,13 +298,16 @@ exports.refreshToken = async (req, res, next) => {
 
     const account = tokenRecord.account;
 
-    // Tạo access token mới
+    // Tạo access token mới với thêm thông tin người dùng
     const accessToken = jwt.sign(
       {
         id: account.id,
         username: account.username,
         email: account.email,
         role: account.role,
+        fullName: account.fullName,
+        avatar: account.avatar,
+        createdAt: account.createdAt
       },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
@@ -247,10 +319,21 @@ exports.refreshToken = async (req, res, next) => {
       {
         accessToken,
         expiresIn: 15 * 60, // 15 phút
+        account: {
+          id: account.id,
+          username: account.username,
+          email: account.email,
+          role: account.role,
+          fullName: account.fullName,
+          avatar: account.avatar,
+          createdAt: account.createdAt,
+          updatedAt: account.updatedAt,
+        }
       },
       "Làm mới token thành công"
     );
   } catch (error) {
+    console.error("Refresh token error:", error);
     next(error);
   }
 };

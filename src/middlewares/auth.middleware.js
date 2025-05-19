@@ -27,10 +27,26 @@ exports.authenticateAccount = async (req, res, next) => {
       throw createError("AuthenticationError", "Token không hợp lệ", 401);
     }
 
-    // Tìm tài khoản
+    // Tìm tài khoản và kiểm tra xem token có chứa thông tin mới nhất không
     const account = await Accounts.findByPk(decoded.id);
     if (!account) {
       throw createError("AuthenticationError", "Không tìm thấy tài khoản", 401);
+    }
+
+    // Kiểm tra xem thông tin trong token có khớp với thông tin hiện tại không
+    if (
+      decoded.username !== account.username ||
+      decoded.email !== account.email ||
+      decoded.role !== account.role ||
+      decoded.fullName !== account.fullName ||
+      decoded.avatar !== account.avatar ||
+      new Date(decoded.createdAt).getTime() !== new Date(account.createdAt).getTime()
+    ) {
+      throw createError(
+        "AuthenticationError",
+        "Token không còn hợp lệ, vui lòng đăng nhập lại",
+        401
+      );
     }
 
     // Lưu thông tin tài khoản vào request
@@ -40,7 +56,7 @@ exports.authenticateAccount = async (req, res, next) => {
     if (error.name === "JsonWebTokenError") {
       next(createError("AuthenticationError", "Token không hợp lệ", 401));
     } else if (error.name === "TokenExpiredError") {
-      next(createError("AuthenticationError", "Token đã hết hạn", 401));
+      next(createError("AuthenticationError", "Token đã hết hạn, vui lòng refresh token", 401));
     } else {
       next(error);
     }
