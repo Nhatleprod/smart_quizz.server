@@ -1,5 +1,6 @@
 const { models } = require('../config/db.config');
 const Questions = models.questions;
+const Answers = models.answers;
 const { Op } = require('sequelize');
 
 // Lấy tất cả câu hỏi với lọc tùy chọn
@@ -130,15 +131,22 @@ exports.delete = async (req, res) => {
   }
 };
 
-// Lấy câu hỏi theo examId
+// Lấy câu hỏi theo examId kèm danh sách câu trả lời
 exports.findByExamId = async (req, res) => {
   try {
     const examId = req.params.examId;
-    
+
     const questions = await Questions.findAll({
-      where: { examId: examId }
+      where: { examId: examId },
+      include: [
+        {
+          model: Answers,
+          as: 'answers',
+          attributes: { exclude: ['createdAt', 'updatedAt'] }
+        }
+      ]
     });
-    
+
     res.status(200).json(questions);
   } catch (error) {
     res.status(500).json({

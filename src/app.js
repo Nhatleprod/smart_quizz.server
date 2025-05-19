@@ -12,7 +12,12 @@ const groupStudyRouter = require("./routes/group_study.router");
 const groupMembersRouter = require("./routes/group_members.router");
 const examsRouter = require("./routes/exams.router");
 const questionsRouter = require("./routes/questions.router");
+const answersRouter = require("./routes/answers.router");
+const commentsRouter = require("./routes/comments.router");
+const ratingsRouter = require("./routes/ratings.router");
+const examAttemptsRouter = require("./routes/exam_attempts.router");
 const testRouter = require("./routes/test.router");
+const examAttemptDetailsRouter = require("./routes/exam_attempt_details.router");
 
 const { sequelize } = require("./config/db.config");
 
@@ -33,6 +38,12 @@ app.use("/api/group_study", groupStudyRouter);
 app.use("/api/group_members", groupMembersRouter);
 app.use("/api/exams", examsRouter);
 app.use("/api/questions", questionsRouter);
+app.use("/api/answers", answersRouter);
+app.use("/api/comments", commentsRouter);
+app.use("/api/ratings", ratingsRouter);
+app.use("/api/exam_attempts", examAttemptsRouter);
+app.use("/api/exam_attempt_details", examAttemptDetailsRouter);
+
 app.get("/", (req, res) => {
   res.send("API đang chạy");
 });
