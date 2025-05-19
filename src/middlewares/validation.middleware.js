@@ -154,31 +154,11 @@ const validateAccountId = [
   },
 ];
 
-// Validation cho việc cập nhật mật khẩu
+// Validation cho việc cập nhật mật khẩu (đã đăng nhập)
 const validateChangePassword = [
   body("oldPassword")
-    .optional()
     .notEmpty()
-    .withMessage("Vui lòng nhập mật khẩu cũ")
-    .custom(async (value, { req }) => {
-      if (value) {
-        if (!req.body.newPassword || !req.body.confirmNewPassword) {
-          throw new Error(
-            "Vui lòng nhập đầy đủ mật khẩu mới và xác nhận mật khẩu"
-          );
-        }
-
-        if (!req.account) {
-          throw new Error("Không tìm thấy thông tin tài khoản");
-        }
-
-        const isMatch = await bcrypt.compare(value, req.account.passwordHash);
-        if (!isMatch) {
-          throw new Error("Mật khẩu cũ không đúng");
-        }
-      }
-      return true;
-    }),
+    .withMessage("Vui lòng nhập mật khẩu cũ"),
 
   body("newPassword")
     .notEmpty()
@@ -186,39 +166,22 @@ const validateChangePassword = [
     .isLength({ min: 6 })
     .withMessage("Mật khẩu mới phải có ít nhất 6 ký tự")
     .custom((value) => {
-      // Kiểm tra ký tự đặc biệt (thêm dấu gạch dưới _)
+      // Kiểm tra ký tự đặc biệt
       const specialChars = /[!@#$%^&*_]/;
       if (!specialChars.test(value)) {
-        console.log("Mật khẩu không chứa ký tự đặc biệt:", value);
-        console.log("Các ký tự đặc biệt được chấp nhận: !@#$%^&*_");
         throw new Error(
           "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*_)"
         );
       }
 
-      // Kiểm tra các ký tự không hợp lệ (thêm dấu gạch dưới _)
+      // Kiểm tra các ký tự không hợp lệ
       const invalidChars = /[^a-zA-Z0-9!@#$%^&*_]/;
       if (invalidChars.test(value)) {
-        console.log("Mật khẩu chứa ký tự không hợp lệ:", value);
-        console.log("Chỉ cho phép chữ cái, số và các ký tự đặc biệt !@#$%^&*_");
         throw new Error(
           "Mật khẩu chỉ được chứa chữ cái, số và các ký tự đặc biệt !@#$%^&*_"
         );
       }
 
-      return true;
-    })
-    .custom(async (value, { req }) => {
-      // Kiểm tra mật khẩu mới không được trùng với mật khẩu cũ
-      if (req.account) {
-        const isSamePassword = await bcrypt.compare(
-          value,
-          req.account.passwordHash
-        );
-        if (isSamePassword) {
-          throw new Error("Mật khẩu mới không được trùng với mật khẩu cũ");
-        }
-      }
       return true;
     }),
 
@@ -232,7 +195,7 @@ const validateChangePassword = [
       return true;
     }),
 
-  handleValidationErrors,
+  handleValidationErrors
 ];
 
 // Validation cho đăng nhập
@@ -250,22 +213,54 @@ const validateLogin = [
   handleValidationErrors,
 ];
 
-// Validation cho việc kiểm tra tài khoản (quên mật khẩu)
+// Validation cho việc kiểm tra tài khoản (quên mật khẩu - bước 1)
 const validateCheckAccount = [
   ...validateUsernameOrEmail,
   handleValidationErrors,
 ];
 
-// Validation cho reset password
+// Validation cho việc đặt lại mật khẩu (quên mật khẩu - bước 2)
 const validateResetPassword = [
-  body("email")
+  body("resetToken")
     .notEmpty()
-    .withMessage("Vui lòng nhập email")
-    .isEmail()
-    .withMessage("Email không hợp lệ")
-    .normalizeEmail(),
+    .withMessage("Token đặt lại mật khẩu là bắt buộc"),
 
-  handleValidationErrors,
+  body("newPassword")
+    .notEmpty()
+    .withMessage("Vui lòng nhập mật khẩu mới")
+    .isLength({ min: 6 })
+    .withMessage("Mật khẩu mới phải có ít nhất 6 ký tự")
+    .custom((value) => {
+      // Kiểm tra ký tự đặc biệt
+      const specialChars = /[!@#$%^&*_]/;
+      if (!specialChars.test(value)) {
+        throw new Error(
+          "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*_)"
+        );
+      }
+
+      // Kiểm tra các ký tự không hợp lệ
+      const invalidChars = /[^a-zA-Z0-9!@#$%^&*_]/;
+      if (invalidChars.test(value)) {
+        throw new Error(
+          "Mật khẩu chỉ được chứa chữ cái, số và các ký tự đặc biệt !@#$%^&*_"
+        );
+      }
+
+      return true;
+    }),
+
+  body("confirmNewPassword")
+    .notEmpty()
+    .withMessage("Vui lòng xác nhận mật khẩu mới")
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error("Mật khẩu xác nhận không khớp");
+      }
+      return true;
+    }),
+
+  handleValidationErrors
 ];
 
 // Export tất cả các middleware

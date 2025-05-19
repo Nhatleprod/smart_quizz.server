@@ -10,6 +10,7 @@ const {
   errorResponse,
 } = require("../utils/response.util");
 const { createError } = require("../middlewares/error.middleware");
+const crypto = require("crypto");
 
 // Tạo một tài khoản mới
 exports.createAccount = async (req, res, next) => {
@@ -111,17 +112,171 @@ exports.updateAccount = async (req, res, next) => {
   }
 };
 
-// Cập nhật mật khẩu tài khoản (dùng cho cả đổi mật khẩu và đặt lại mật khẩu)
+// Đổi mật khẩu (cho người dùng đã đăng nhập)
 exports.changePassword = async (req, res, next) => {
   try {
-    const { newPassword } = req.body;
+    const { oldPassword, newPassword } = req.body;
     const account = req.account;
 
+    // Kiểm tra mật khẩu hiện tại
+    const isPasswordValid = await bcrypt.compare(oldPassword, account.passwordHash);
+    if (!isPasswordValid) {
+      throw createError(
+        "ValidationError",
+        "Mật khẩu hiện tại không đúng",
+        400
+      );
+    }
+
+    // Mã hóa mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
     // Cập nhật mật khẩu mới
-    await account.update({ passwordHash: newPassword });
+    await account.update({ passwordHash: hashedPassword });
     const { passwordHash, ...accountData } = account.toJSON();
 
-    successResponse(res, accountData, "Cập nhật mật khẩu thành công");
+    // Thu hồi tất cả refresh token của người dùng
+    await models.refresh_tokens.update(
+      { isRevoked: true },
+      { where: { accountId: account.id, isRevoked: false } }
+    );
+
+    successResponse(res, accountData, "Đổi mật khẩu thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Kiểm tra tài khoản tồn tại (cho chức năng quên mật khẩu)
+exports.checkAccountExists = async (req, res, next) => {
+  try {
+    const { username, email } = req.body;
+    const whereCondition = {};
+    if (username) whereCondition.username = username;
+    if (email) whereCondition.email = email;
+
+    const account = await Accounts.findOne({
+      where: whereCondition,
+      attributes: ['id', 'username', 'email', 'fullName', 'avatar']
+    });
+
+    if (!account) {
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản với thông tin đã cung cấp",
+        404
+      );
+    }
+
+    // Tạo token tạm thời để xác thực bước reset password
+    const resetToken = jwt.sign(
+      { 
+        id: account.id,
+        action: 'reset_password',
+        exp: Math.floor(Date.now() / 1000) + (15 * 60) // 15 phút
+      },
+      process.env.JWT_SECRET
+    );
+
+    successResponse(res, {
+      account: {
+        id: account.id,
+        username: account.username,
+        email: account.email,
+        fullName: account.fullName,
+        avatar: account.avatar
+      },
+      resetToken
+    }, "Tìm thấy tài khoản");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Đặt lại mật khẩu (cho người dùng quên mật khẩu)
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    // Verify reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+      if (!decoded || !decoded.id || decoded.action !== 'reset_password') {
+        throw new Error('Invalid token');
+      }
+    } catch (error) {
+      throw createError(
+        "AuthenticationError",
+        "Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn",
+        401
+      );
+    }
+
+    // Tìm tài khoản
+    const account = await Accounts.findByPk(decoded.id);
+    if (!account) {
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản",
+        404
+      );
+    }
+
+    // Mã hóa mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Cập nhật mật khẩu mới
+    await account.update({ passwordHash: hashedPassword });
+
+    // Thu hồi tất cả refresh token của người dùng
+    await models.refresh_tokens.update(
+      { isRevoked: true },
+      { where: { accountId: account.id, isRevoked: false } }
+    );
+
+    successResponse(res, null, "Đặt lại mật khẩu thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Tạo token đặt lại mật khẩu
+exports.createPasswordResetToken = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    // Tìm tài khoản theo email
+    const account = await Accounts.findOne({ where: { email } });
+    if (!account) {
+      throw createError(
+        "NotFoundError",
+        "Không tìm thấy tài khoản với email này",
+        404
+      );
+    }
+
+    // Tạo token ngẫu nhiên
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
+
+    // Lưu token vào database
+    await models.password_reset_tokens.create({
+      accountId: account.id,
+      token: resetToken,
+      expiresAt,
+      isUsed: false
+    });
+
+    // TODO: Gửi email với reset token
+    // Trong môi trường production, bạn nên gửi email thay vì trả về token
+    successResponse(
+      res,
+      { resetToken, expiresAt },
+      "Token đặt lại mật khẩu đã được tạo. Vui lòng kiểm tra email của bạn."
+    );
   } catch (error) {
     next(error);
   }
@@ -363,16 +518,6 @@ exports.logout = async (req, res, next) => {
     }
 
     successResponse(res, null, "Đăng xuất thành công");
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Kiểm tra tài khoản tồn tại (cho chức năng quên mật khẩu)
-exports.checkAccountExists = async (req, res, next) => {
-  try {
-    const { passwordHash, ...accountData } = req.account.toJSON();
-    successResponse(res, accountData, "Tìm thấy tài khoản");
   } catch (error) {
     next(error);
   }

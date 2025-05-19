@@ -44,6 +44,20 @@ router.post(
   accountsController.login
 );
 
+// Quên mật khẩu - Bước 1: Kiểm tra tài khoản
+router.post(
+  "/forgot-password",
+  validateCheckAccount,
+  accountsController.checkAccountExists
+);
+
+// Quên mật khẩu - Bước 2: Đặt lại mật khẩu
+router.post(
+  "/reset-password",
+  validateResetPassword,
+  accountsController.resetPassword
+);
+
 // Refresh token
 router.post(
   "/refresh-token",
@@ -135,7 +149,7 @@ accountByIdRouter.put(
   accountsController.updateAccount
 );
 
-// Cập nhật mật khẩu
+// Cập nhật mật khẩu (cho người dùng đã đăng nhập)
 accountByIdRouter.put(
   "/password",
   (req, res, next) => {
@@ -148,7 +162,6 @@ accountByIdRouter.put(
     next();
   },
   validateChangePassword,
-  hashPassword,
   accountsController.changePassword
 );
 
