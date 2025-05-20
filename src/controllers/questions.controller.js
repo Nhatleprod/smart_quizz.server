@@ -106,23 +106,29 @@ exports.update = async (req, res) => {
   }
 };
 
-// Xóa một câu hỏi
+// Xóa một câu hỏi và các câu trả lời liên quan
 exports.delete = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
+    // Xóa tất cả câu trả lời liên quan trước
+    await Answers.destroy({
+      where: { questionId: id }
+    });
+
+    // Sau đó xóa câu hỏi
     const deleted = await Questions.destroy({
       where: { id: id }
     });
-    
+
     if (deleted === 0) {
       return res.status(404).json({
         message: `Không tìm thấy câu hỏi với id ${id}.`
       });
     }
-    
+
     res.status(200).json({
-      message: "Câu hỏi đã được xóa thành công."
+      message: "Câu hỏi và các câu trả lời liên quan đã được xóa thành công."
     });
   } catch (error) {
     res.status(500).json({
@@ -182,6 +188,55 @@ exports.createBulk = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: error.message || "Đã xảy ra lỗi khi tạo các câu hỏi."
+    });
+  }
+};
+
+// Tạo 1 câu hỏi với danh sách 4 câu trả lời
+exports.createWithAnswers = async (req, res) => {
+  try {
+    const { examId, content, answers } = req.body;
+    
+    // Xác thực các trường bắt buộc
+    if (!examId) {
+      return res.status(400).json({
+        message: "ExamId là bắt buộc!"
+      });
+    }
+    
+    if (!content) {
+      return res.status(400).json({
+        message: "Nội dung câu hỏi là bắt buộc!"
+      });
+    }
+    
+    if (!answers || !Array.isArray(answers) || answers.length !== 4) {
+      return res.status(400).json({
+        message: "Cần cung cấp đúng 4 câu trả lời!"
+      });
+    }
+    
+    // Tạo câu hỏi
+    const question = await Questions.create({
+      examId,
+      content
+    });
+
+    // in ra id của câu hỏi vừa tạo
+    // console.log("ID câu hỏi vừa tạo:", question.id);
+    
+    // Tạo danh sách câu trả lời
+    const answersWithQuestionId = answers.map(answer => ({
+      ...answer,
+      questionId: question.id
+    }));
+    
+    await Answers.bulkCreate(answersWithQuestionId);
+    
+    res.status(201).json(question);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message || "Đã xảy ra lỗi khi tạo câu hỏi với danh sách câu trả lời."
     });
   }
 };
