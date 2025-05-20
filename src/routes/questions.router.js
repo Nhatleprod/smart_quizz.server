@@ -23,4 +23,7 @@ router.delete('/:id', questionsController.delete);
 // Lấy câu hỏi theo examId kèm danh sách câu trả lời 
 router.get('/exam/:examId', questionsController.findByExamId);
 
+// Tạo 1 câu hỏi với danh sách 4 câu trả lời
+router.post('/with-answers', questionsController.createWithAnswers);
+
 module.exports = router;
