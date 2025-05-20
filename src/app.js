@@ -1,57 +1,112 @@
 require("dotenv").config();
+
+// Import các dependencies
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const { sequelize } = require("./config/db.config");
+const { errorHandler } = require("./middlewares");
 
 // Import routes
-const accountsRouter = require("./routes/accounts.router");
-const usersRouter = require("./routes/users.router");
-const adminsRouter = require("./routes/admins.router");
-const groupStudyRouter = require("./routes/group_study.router");
-const groupMembersRouter = require("./routes/group_members.router");
-const examsRouter = require("./routes/exams.router");
-const questionsRouter = require("./routes/questions.router");
-const answersRouter = require("./routes/answers.router");
-const commentsRouter = require("./routes/comments.router");
-const ratingsRouter = require("./routes/ratings.router");
-const examAttemptsRouter = require("./routes/exam_attempts.router");
-const testRouter = require("./routes/test.router");
-const examAttemptDetailsRouter = require("./routes/exam_attempt_details.router");
+const apiRouter = require("./routes");
 
-const { sequelize } = require("./config/db.config");
-
+// Khởi tạo app
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(helmet());
-app.use(morgan("dev"));
+// Middleware cơ bản
+const setupMiddleware = () => {
+  // Security middleware
+  app.use(helmet());
+  
+  // CORS configuration
+  const corsOptions = {
+    origin: process.env.CORS_ORIGIN || '*', // Trong production nên set domain cụ thể
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    credentials: true,
+    maxAge: 86400 // 24 giờ
+  };
+  app.use(cors(corsOptions));
+
+  // Body parsing middleware
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // Logging middleware
+  if (process.env.NODE_ENV !== "test") {
+    app.use(morgan("dev"));
+  }
+};
 
 // Routes
-app.use("/api/test", testRouter);
-app.use("/api/accounts", accountsRouter);
-app.use("/api/users", usersRouter);
-app.use("/api/admins", adminsRouter);
-app.use("/api/group_study", groupStudyRouter);
-app.use("/api/group_members", groupMembersRouter);
-app.use("/api/exams", examsRouter);
-app.use("/api/questions", questionsRouter);
-app.use("/api/answers", answersRouter);
-app.use("/api/comments", commentsRouter);
-app.use("/api/ratings", ratingsRouter);
-app.use("/api/exam_attempts", examAttemptsRouter);
-app.use("/api/exam_attempt_details", examAttemptDetailsRouter);
+const setupRoutes = () => {
+  // Root endpoint
+  app.get("/", (req, res) => {
+    res.send("API đang chạy");
+  });
 
-app.get("/", (req, res) => {
-  res.send("API đang chạy");
-});
+  // API routes
+  if (typeof apiRouter === "function") {
+    app.use("/api", apiRouter);
+  } else {
+    console.error("apiRouter is not a middleware function:", apiRouter);
+    process.exit(1);
+  }
 
-// Connect to database
-sequelize
-  .authenticate()
-  .then(() => console.log("Kết nối DB thành công"))
-  .catch((err) => console.error("Kết nối DB thất bại:", err));
+  // 404 handler
+  app.use((req, res) => {
+    res.status(404).json({
+      success: false,
+      message: "Route not found",
+    });
+  });
 
-module.exports = app;
+  // Error handler
+  if (typeof errorHandler === "function") {
+    app.use(errorHandler);
+  } else {
+    console.error("errorHandler is not a middleware function:", errorHandler);
+    process.exit(1);
+  }
+};
+
+// Database connection
+const connectDatabase = async () => {
+  try {
+    await sequelize.authenticate();
+    console.log("Database connection established successfully");
+  } catch (error) {
+    console.error("Unable to connect to the database:", error);
+    process.exit(1);
+  }
+};
+
+// Khởi động ứng dụng
+const startApp = async () => {
+  try {
+    // Setup middleware trước
+    setupMiddleware();
+
+    // Connect to database
+    await connectDatabase();
+
+    // Setup routes sau khi đã kết nối database
+    setupRoutes();
+
+    // Start server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+
+    return app;
+  } catch (error) {
+    console.error("Failed to start application:", error);
+    process.exit(1);
+  }
+};
+
+// Export app và hàm startApp
+module.exports = { app, startApp };
