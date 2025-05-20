@@ -106,23 +106,29 @@ exports.update = async (req, res) => {
   }
 };
 
-// Xóa một câu hỏi
+// Xóa một câu hỏi và các câu trả lời liên quan
 exports.delete = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
+    // Xóa tất cả câu trả lời liên quan trước
+    await Answers.destroy({
+      where: { questionId: id }
+    });
+
+    // Sau đó xóa câu hỏi
     const deleted = await Questions.destroy({
       where: { id: id }
     });
-    
+
     if (deleted === 0) {
       return res.status(404).json({
         message: `Không tìm thấy câu hỏi với id ${id}.`
       });
     }
-    
+
     res.status(200).json({
-      message: "Câu hỏi đã được xóa thành công."
+      message: "Câu hỏi và các câu trả lời liên quan đã được xóa thành công."
     });
   } catch (error) {
     res.status(500).json({
