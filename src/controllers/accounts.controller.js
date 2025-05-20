@@ -158,7 +158,7 @@ exports.checkAccountExists = async (req, res, next) => {
 
     const account = await Accounts.findOne({
       where: whereCondition,
-      attributes: ['id', 'username', 'email', 'fullName', 'avatar']
+      attributes: ['id', 'username', 'email', 'role']
     });
 
     if (!account) {
@@ -197,25 +197,19 @@ exports.checkAccountExists = async (req, res, next) => {
 // Đặt lại mật khẩu (cho người dùng quên mật khẩu)
 exports.resetPassword = async (req, res, next) => {
   try {
-    const { resetToken, newPassword } = req.body;
+    const { id, newPassword, confirmNewPassword } = req.body;
 
-    // Verify reset token
-    let decoded;
-    try {
-      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
-      if (!decoded || !decoded.id || decoded.action !== 'reset_password') {
-        throw new Error('Invalid token');
-      }
-    } catch (error) {
+    // Kiểm tra mật khẩu mới và xác nhận mật khẩu
+    if (newPassword !== confirmNewPassword) {
       throw createError(
-        "AuthenticationError",
-        "Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn",
-        401
+        "ValidationError",
+        "Mật khẩu mới và xác nhận mật khẩu không khớp",
+        400
       );
     }
 
-    // Tìm tài khoản
-    const account = await Accounts.findByPk(decoded.id);
+    // Tìm tài khoản theo ID
+    const account = await Accounts.findByPk(id);
     if (!account) {
       throw createError(
         "NotFoundError",

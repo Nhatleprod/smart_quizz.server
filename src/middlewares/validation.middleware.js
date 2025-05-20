@@ -221,10 +221,6 @@ const validateCheckAccount = [
 
 // Validation cho việc đặt lại mật khẩu (quên mật khẩu - bước 2)
 const validateResetPassword = [
-  body("resetToken")
-    .notEmpty()
-    .withMessage("Token đặt lại mật khẩu là bắt buộc"),
-
   body("newPassword")
     .notEmpty()
     .withMessage("Vui lòng nhập mật khẩu mới")
