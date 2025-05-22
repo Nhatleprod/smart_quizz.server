@@ -8,16 +8,17 @@ const { Op } = require("sequelize");
 // Lấy danh sách tất cả các bài thi cùng với số lượng câu hỏi, trung bình ratings và số lượng exam attempts cho mỗi bài thi
 exports.findAll = async (req, res) => {
   try {
-    const { title, category, level, isApproved } = req.query;
+    const { title, level, isApproved } = req.query;
     
     const filter = {};
     
     if (title) {
-      filter.title = { [Op.like]: `%${title}%` };
-    }
-    
-    if (category) {
-      filter.category = category;
+      // Tìm kiếm tương đối trong nhiều cột: title, description, category
+      filter[Op.or] = [
+        { title: { [Op.like]: `%${title}%` } },
+        { description: { [Op.like]: `%${title}%` } },
+        { category: { [Op.like]: `%${title}%` } }
+      ];
     }
     
     if (level) {
@@ -105,7 +106,37 @@ exports.findOne = async (req, res) => {
       });
     }
 
-    res.status(200).json(exam);
+    // Get question count
+    const questionCount = await Questions.count({ where: { examId: id } });
+
+    // Get average rating
+    const ratingResult = await Ratings.findOne({
+      attributes: [
+        [Ratings.sequelize.fn('AVG', Ratings.sequelize.col('rating')), 'avgRating']
+      ],
+      where: { examId: id },
+      raw: true
+    });
+    const avgRating = parseFloat(ratingResult.avgRating) || 0;
+
+    // Get attempt count
+    const attemptCount = await ExamAttempts.count({ where: { examId: id } });
+
+    // Get author info (users table) by accountId
+    const Users = models.users;
+    const author = await Users.findOne({
+      where: { accountId: exam.accountId },
+      attributes: ['fullName', 'accountId'],
+      raw: true
+    });
+
+    res.status(200).json({
+      ...exam.toJSON(),
+      questionCount,
+      avgRating,
+      attemptCount,
+      author: author ? { fullName: author.fullName, accountId: author.accountId } : null
+    });
   } catch (error) {
     res.status(500).json({
       message: error.message || "Error retrieving exam.",
