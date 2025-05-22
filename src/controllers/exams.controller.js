@@ -1,36 +1,94 @@
 const { models } = require("../config/db.config");
 const Exams = models.exams;
+const Questions = models.questions;
+const Ratings = models.ratings;
+const ExamAttempts = models.exam_attempts;
 const { Op } = require("sequelize");
 
 // Lấy danh sách tất cả các bài thi cùng với số lượng câu hỏi, trung bình ratings và số lượng exam attempts cho mỗi bài thi
 exports.findAll = async (req, res) => {
   try {
-    const { title, category, level, isApproved } = req.query;
-
+    const { title, level, isApproved } = req.query;
+    
     const filter = {};
-
+    
     if (title) {
-      filter.title = { [Op.like]: `%${title}%` };
+      // Tìm kiếm tương đối trong nhiều cột: title, description, category
+      filter[Op.or] = [
+        { title: { [Op.like]: `%${title}%` } },
+        { description: { [Op.like]: `%${title}%` } },
+        { category: { [Op.like]: `%${title}%` } }
+      ];
     }
-
-    if (category) {
-      filter.category = category;
-    }
-
+    
     if (level) {
       filter.level = level;
     }
-
+    
     if (isApproved !== undefined) {
-      filter.isApproved = isApproved === "true";
+      filter.isApproved = isApproved === 'true';
     }
-
+    
     const exams = await Exams.findAll({ where: filter });
 
-    res.status(200).json(exams);
+    // Get questionCount for each exam
+    const examIds = exams.map(exam => exam.id);
+
+    // Get question counts
+    const questionCounts = await Questions.findAll({
+      attributes: ['examId', [Questions.sequelize.fn('COUNT', Questions.sequelize.col('id')), 'count']],
+      where: { examId: examIds },
+      group: ['examId']
+    });
+
+    // Get average ratings
+    const ratingAverages = await Ratings.findAll({
+      attributes: [
+        'examId',
+        [Ratings.sequelize.fn('AVG', Ratings.sequelize.col('rating')), 'avgRating']
+      ],
+      where: { examId: examIds },
+      group: ['examId']
+    });
+
+    // Lấy số lượng exam attempts(số người làm bài thi)
+    const attemptCounts = await ExamAttempts.findAll({
+      attributes: [
+        'examId',
+        [ExamAttempts.sequelize.fn('COUNT', ExamAttempts.sequelize.col('id')), 'attemptCount']
+      ],
+      where: { examId: examIds },
+      group: ['examId']
+    });
+
+    // Map examId to values
+    const countMap = {};
+    questionCounts.forEach(qc => {
+      countMap[qc.examId] = parseInt(qc.get('count'), 10);
+    });
+
+    const avgRatingMap = {};
+    ratingAverages.forEach(r => {
+      avgRatingMap[r.examId] = parseFloat(r.get('avgRating')) || 0;
+    });
+
+    const attemptCountMap = {};
+    attemptCounts.forEach(a => {
+      attemptCountMap[a.examId] = parseInt(a.get('attemptCount'), 10);
+    });
+
+    // Attach data to each exam
+    const examsWithStats = exams.map(exam => ({
+      ...exam.toJSON(),
+      questionCount: countMap[exam.id] || 0,
+      avgRating: avgRatingMap[exam.id] || 0,
+      attemptCount: attemptCountMap[exam.id] || 0
+    }));
+
+    res.status(200).json(examsWithStats);
   } catch (error) {
     res.status(500).json({
-      message: error.message || "Some error occurred while retrieving exams.",
+      message: error.message || "Some error occurred while retrieving exams."
     });
   }
 };
@@ -48,7 +106,37 @@ exports.findOne = async (req, res) => {
       });
     }
 
-    res.status(200).json(exam);
+    // Get question count
+    const questionCount = await Questions.count({ where: { examId: id } });
+
+    // Get average rating
+    const ratingResult = await Ratings.findOne({
+      attributes: [
+        [Ratings.sequelize.fn('AVG', Ratings.sequelize.col('rating')), 'avgRating']
+      ],
+      where: { examId: id },
+      raw: true
+    });
+    const avgRating = parseFloat(ratingResult.avgRating) || 0;
+
+    // Get attempt count
+    const attemptCount = await ExamAttempts.count({ where: { examId: id } });
+
+    // Get author info (users table) by accountId
+    const Users = models.users;
+    const author = await Users.findOne({
+      where: { accountId: exam.accountId },
+      attributes: ['fullName', 'accountId'],
+      raw: true
+    });
+
+    res.status(200).json({
+      ...exam.toJSON(),
+      questionCount,
+      avgRating,
+      attemptCount,
+      author: author ? { fullName: author.fullName, accountId: author.accountId } : null
+    });
   } catch (error) {
     res.status(500).json({
       message: error.message || "Error retrieving exam.",

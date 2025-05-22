@@ -217,9 +217,14 @@ exports.createBulk = async (req, res) => {
     
     // Kiểm tra dữ liệu đầu vào
     for (let detail of req.body.details) {
-      if (!detail.examAttemptId || !detail.questionId || detail.isCorrect === undefined) {
+      if (
+        !detail.examAttemptId ||
+        !detail.questionId ||
+        detail.isCorrect === undefined ||
+        !detail.answerId
+      ) {
         return res.status(400).json({
-          message: "ID lần thi, ID câu hỏi và trạng thái đúng/sai không được để trống cho mỗi chi tiết!"
+          message: "ID lần thi, ID câu hỏi, ID câu trả lời và trạng thái đúng/sai không được để trống cho mỗi chi tiết!"
         });
       }
     }
