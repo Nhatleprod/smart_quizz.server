@@ -1,7 +1,8 @@
 // server.js
-const app = require("./app");
-const port = process.env.PORT || 3000;
+const { startApp } = require("./app");
 
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+// Khởi động ứng dụng
+startApp().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
 });
